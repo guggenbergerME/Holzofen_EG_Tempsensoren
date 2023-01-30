@@ -6,15 +6,33 @@
 
 
 /////////////////////////////////////////////////////////////////////////// Funktionsprototypen
-void loop                       ();
-void wifi_setup                 ();
-void callback                   (char* topic, byte* payload, unsigned int length);
-void reconnect                  ();
-void temperaturen_messen        ();
+void loop                             ();
+void wifi_setup                       ();
+void callback                         (char* topic, byte* payload, unsigned int length);
+void reconnect                        ();
+void temperaturen_messen              ();
+
+/////////////////////////////////////////////////////////////////////////// DS18b20
+#define SENSOR_PIN  21 // ESP32 Pin OneWire
+float tempC; // temperature in Celsius
+char buffer1[10];
+
+OneWire oneWire(SENSOR_PIN);
+DallasTemperature DS18B20(&oneWire);
+
+/////////////////////////////////////////////////////////////////////////// Temp. Sensor Var
+float wert_temp_sensor_wassertasche;
+float wert_temp_sensor_vorlauf;
+float wert_temp_sensor_ruecklauf;
+
+/////////////////////////////////////////////////////////////////////////// Sensoradressen onewire
+DeviceAddress adr_temp_sensor_wassertasche  = { 0x28, 0x3B, 0xED, 0x81, 0xE3, 0xDD, 0x3C, 0x84 }; 
+DeviceAddress adr_temp_sensor_vorlauf       = { 0x28, 0xB7, 0xB3, 0x81, 0xE3, 0x92, 0x3C, 0xA7 };
+DeviceAddress adr_temp_sensor_ruecklauf     = { 0x28, 0xA9, 0xDB, 0x81, 0xE3, 0x16, 0x3C, 0xD4 };
 
 /////////////////////////////////////////////////////////////////////////// Schleifen verwalten
 unsigned long previousMillis_temp_messen = 0; // Spannung Messen
-unsigned long interval_temp_messen = 10000; 
+unsigned long interval_temp_messen = 5000; 
 
 /////////////////////////////////////////////////////////////////////////// Kartendaten 
 const char* kartenID = "Holzofen_EG_Regelung";
@@ -123,18 +141,62 @@ void setup() {
   // Serielle Kommunikation starten
   Serial.begin(115200);
 
-// Wifi setup
-wifi_setup();
+  // Wifi setup
+  wifi_setup();
 
-// MQTT Broker
+  // MQTT Broker
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 
+  //DS18b20 Setup
+  DS18B20.begin();
 
 }
 
 /////////////////////////////////////////////////////////////////////////// Temperaturen messen
 void temperaturen_messen() {
+
+  DS18B20.requestTemperatures();       // send the command to get temperatures
+
+  wert_temp_sensor_wassertasche = DS18B20.getTempC(adr_temp_sensor_wassertasche); 
+   if ((wert_temp_sensor_wassertasche == -127)||(wert_temp_sensor_wassertasche == 85))  { 
+     Serial.println("Sensor wert_temp_sensor_wassertasche : FEHLER");
+     } 
+    else 
+        { 
+          dtostrf(wert_temp_sensor_wassertasche,2, 1, buffer1); 
+          Serial.println("Sensor wert_temp_sensor_wassertasche : ");
+          Serial.println(buffer1);    
+          client.publish("Heizung/HolzofenEG/wassertasche", buffer1);     
+        }
+
+
+  wert_temp_sensor_vorlauf  = DS18B20.getTempC(adr_temp_sensor_vorlauf); 
+   if ((wert_temp_sensor_vorlauf == -127)||(wert_temp_sensor_vorlauf == 85))  { 
+     Serial.println("Sensor wert_temp_sensor_vorlauf : FEHLER");
+     } 
+    else 
+        { 
+          dtostrf(wert_temp_sensor_vorlauf,2, 1, buffer1); 
+          Serial.println("Sensor wert_temp_sensor_vorlauf : ");
+          Serial.println(buffer1);    
+          client.publish("Heizung/HolzofenEG/vorlauf", buffer1);     
+        }
+
+
+  wert_temp_sensor_ruecklauf = DS18B20.getTempC(adr_temp_sensor_ruecklauf); 
+   if ((wert_temp_sensor_ruecklauf == -127)||(wert_temp_sensor_ruecklauf== 85))  { 
+     Serial.println("Sensor wert_temp_sensor_ruecklauf : FEHLER");
+     } 
+    else 
+        { 
+          dtostrf(wert_temp_sensor_ruecklauf,2, 1, buffer1); 
+          Serial.println("Sensor wert_temp_sensor_ruecklauf : ");
+          Serial.println(buffer1);    
+          client.publish("Heizung/HolzofenEG/ruecklauf", buffer1);     
+        }
+
+
 
 }
 
@@ -142,11 +204,18 @@ void temperaturen_messen() {
 void loop() {
 
 
+    // mqtt Daten senden     
+  if (!client.connected()) {
+      reconnect();
+    }
+    client.loop();  
+
+
   //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ Temperatur Ofen messen
   if (millis() - previousMillis_temp_messen > interval_temp_messen) {
       previousMillis_temp_messen = millis(); 
       // Prüfen der Panelenspannung
-      Serial.println("Temperaturen messen");
+      Serial.println(">>LOOP<< Temperaturen messen");
       temperaturen_messen();
     }
 
