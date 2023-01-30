@@ -1,32 +1,23 @@
 #include <Arduino.h>
 #include <PubSubClient.h>  
 #include "WiFi.h"
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
-/////////////////////////////////////////////////////////////////////////// mqtt variable
-char msgToPublish[60];
-char stgFromFloat[10];
-
-//SCL an GPIO 22 - SDA an GPIO 21
-
-/////////////////////////////////////////////////////////////////////////// Pin Impulsgeber deklarieren
-int impulsgeberPIN =  13; // 0,5 Watt pro Impuls
-int pulseCount;
 
 /////////////////////////////////////////////////////////////////////////// Funktionsprototypen
 void loop                       ();
 void wifi_setup                 ();
 void callback                   (char* topic, byte* payload, unsigned int length);
 void reconnect                  ();
-void impulse_auswerten          ();
-void ImpulsZaehlen              ();
-
+void temperaturen_messen        ();
 
 /////////////////////////////////////////////////////////////////////////// Schleifen verwalten
-unsigned long previousMillis_messen = 0; // Spannung Messen
-unsigned long interval_messen = 60000; 
+unsigned long previousMillis_temp_messen = 0; // Spannung Messen
+unsigned long interval_temp_messen = 10000; 
 
 /////////////////////////////////////////////////////////////////////////// Kartendaten 
-const char* kartenID = "Solarmodul_001_Watt";
+const char* kartenID = "Holzofen_EG_Regelung";
 
 /////////////////////////////////////////////////////////////////////////// MQTT 
 WiFiClient espClient;
@@ -42,7 +33,7 @@ const char* WIFI_SSID = "GuggenbergerLinux";
 const char* WIFI_PASS = "Isabelle2014samira";
 
 // Static IP
-IPAddress local_IP(192, 168, 13, 52);
+IPAddress local_IP(192, 168, 5, 29);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 0, 0, 0);  
 IPAddress dns(192, 168, 1, 1); 
@@ -125,40 +116,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
   */
 }
 
-/////////////////////////////////////////////////////////////////////////// Messen Spannung
-void impulse_auswerten() {
-
-  // MQTT Server kontaktieren
-  if (!client.connected()) {
-  reconnect();
-  }
-  client.loop();
-
-  // Spannung über Spannungsteiler messen. Maximal U max_V_solar
-  Serial.println(pulseCount);
-
-  // Leistung berechnen
-  float leistung = pulseCount * 0.5;
-  Serial.print("Gemessene Leistung in Watt -> ");
-  Serial.println(leistung);
-
-  // mqtt senden
-      // mqtt Datensatz senden
-    dtostrf(leistung, 4, 2, stgFromFloat);
-    sprintf(msgToPublish, "%s", stgFromFloat);
-    client.publish("Solarpanel/001/watt", msgToPublish);
-
-  // Pulse wieder löschen
-  pulseCount = 0;
-
-}
-
-/////////////////////////////////////////////////////////////////////////// ImpulsZaehlen - INTRRUP
-void ImpulsZaehlen() {
-  // Impulse Hochzählen
-  pulseCount++;
-
-}
 
 /////////////////////////////////////////////////////////////////////////// SETUP
 void setup() {
@@ -173,26 +130,25 @@ wifi_setup();
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 
-// Pin deklarieren
-// Panel senkrecht init
-pinMode(impulsgeberPIN, INPUT);
-attachInterrupt(impulsgeberPIN, ImpulsZaehlen, FALLING);
- 
+
+}
+
+/////////////////////////////////////////////////////////////////////////// Temperaturen messen
+void temperaturen_messen() {
+
 }
 
 /////////////////////////////////////////////////////////////////////////// LOOP
 void loop() {
 
 
-
-  //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ Spannung messen
-  if (millis() - previousMillis_messen > interval_messen) {
-      previousMillis_messen = millis(); 
+  //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ Temperatur Ofen messen
+  if (millis() - previousMillis_temp_messen > interval_temp_messen) {
+      previousMillis_temp_messen = millis(); 
       // Prüfen der Panelenspannung
-      Serial.println("Impulse auslesen");
-      impulse_auswerten();
+      Serial.println("Temperaturen messen");
+      temperaturen_messen();
     }
 
 
-delay(500);
 }
